@@ -51,7 +51,6 @@ parser.add_argument("--depth", type=int, default=20, help="depth of the Transfor
 parser.add_argument("--aspect-ratio", type=int, default=64, help="model_dim = depth * aspect_ratio")
 parser.add_argument("--head-dim", type=int, default=128, help="target head dimension for attention")
 parser.add_argument("--max-seq-len", type=int, default=2048, help="max context length")
-parser.add_argument("--window-pattern", type=str, default="SSSL", help="sliding window pattern tiled across layers: L=full, S=half context (e.g. 'SSL')")
 # Training horizon (only one used, in order of precedence)
 parser.add_argument("--num-iterations", type=int, default=-1, help="explicit number of optimization steps (-1 = disable)")
 parser.add_argument("--target-flops", type=float, default=-1.0, help="calculate num_iterations to reach target_flops (-1 = disable)")
@@ -63,7 +62,6 @@ parser.add_argument("--embedding-lr", type=float, default=0.3, help="learning ra
 parser.add_argument("--unembedding-lr", type=float, default=0.008, help="learning rate for unembedding parameters (Adam)")
 parser.add_argument("--weight-decay", type=float, default=0.28, help="cautious weight decay for the Muon optimizer (for weights)")
 parser.add_argument("--matrix-lr", type=float, default=0.02, help="learning rate for matrix parameters (Muon)")
-parser.add_argument("--scalar-lr", type=float, default=0.5, help="learning rate for scalars (resid_lambdas, x0_lambdas)")
 parser.add_argument("--warmup-steps", type=int, default=40, help="number of steps for LR warmup")
 parser.add_argument("--warmdown-ratio", type=float, default=0.65, help="ratio of iterations for LR warmdown")
 parser.add_argument("--final-lr-frac", type=float, default=0.05, help="final LR as fraction of initial LR")
@@ -74,9 +72,10 @@ parser.add_argument("--eval-tokens", type=int, default=80*524288, help="number o
 parser.add_argument("--core-metric-every", type=int, default=2000, help="evaluate CORE metric every N steps (-1 = disable)")
 parser.add_argument("--core-metric-max-per-task", type=int, default=500, help="examples per task for CORE metric")
 parser.add_argument("--sample-every", type=int, default=2000, help="sample from model every N steps (-1 = disable)")
-parser.add_argument("--save-every", type=int, default=-1, help="save checkpoints every N steps (-1 = only at end)")
+parser.add_argument("--save-every-pct", type=float, default=-1, help="save checkpoints every N%% of training (e.g. 25 = save at 25%%, 50%%, 75%%, 100%%). -1 = only at end")
 # Output
 parser.add_argument("--model-tag", type=str, default=None, help="override model tag for checkpoint directory name")
+parser.add_argument("--rope-removal-pct", type=float, default=-1, help="remove RoPE at this %% of training (e.g. 50 = remove at 50%%). -1 = disable")
 args = parser.parse_args()
 user_config = vars(args).copy()  # for logging
 # -----------------------------------------------------------------------------
@@ -111,9 +110,6 @@ else:
     else:
         print0("WARNING: Flash Attention 3 not available, using PyTorch SDPA fallback")
     print0("WARNING: Training will be less efficient without FA3")
-    if args.window_pattern != "L":
-        print0(f"WARNING: SDPA has no support for sliding window attention (window_pattern='{args.window_pattern}'). Your GPU utilization will be terrible.")
-        print0("WARNING: Recommend using --window-pattern L for full context attention without alternating sliding window patterns.")
     print0("!" * 80)
 
 # -----------------------------------------------------------------------------
@@ -136,7 +132,6 @@ def build_model_meta(depth):
     config = GPTConfig(
         sequence_len=args.max_seq_len, vocab_size=vocab_size,
         n_layer=depth, n_head=num_heads, n_kv_head=num_heads, n_embd=model_dim,
-        window_pattern=args.window_pattern,
     )
     with torch.device("meta"):
         model_meta = GPT(config)
@@ -308,7 +303,6 @@ optimizer = model.setup_optimizer(
     # AdamW hyperparameters
     unembedding_lr=args.unembedding_lr * batch_lr_scale,
     embedding_lr=args.embedding_lr * batch_lr_scale,
-    scalar_lr=args.scalar_lr * batch_lr_scale,
     # Muon hyperparameters
     matrix_lr=args.matrix_lr * batch_lr_scale,
     weight_decay=weight_decay_scaled,
@@ -401,6 +395,7 @@ else:
     min_val_bpb = loop_state["min_val_bpb"]
     smooth_train_loss = loop_state["smooth_train_loss"]
     total_training_time = loop_state["total_training_time"]
+    orig_model.use_rope = loop_state.get("use_rope", True) # backward compat: default to True
 
 # Figure out the needed gradient accumulation micro-steps to reach the desired total batch size per step
 tokens_per_fwdbwd = args.device_batch_size * args.max_seq_len # tokens per iteration for a single rank
@@ -415,6 +410,35 @@ print0(f"Total batch size {total_batch_size:,} => gradient accumulation steps: {
 while True:
     last_step = step == num_iterations # loop runs num_iterations+1 times so that we can eval/save at the end
     flops_so_far = num_flops_per_token * total_batch_size * step
+
+    # RoPE removal: at the specified percentage of training, disable RoPE and evaluate both ways
+    if args.rope_removal_pct > 0 and orig_model.use_rope:
+        rope_removal_step = round(args.rope_removal_pct / 100 * num_iterations)
+        if step >= rope_removal_step:
+            print0(f"Step {step:05d} | RoPE removal triggered at {args.rope_removal_pct}% of training")
+            # Evaluate WITH RoPE (before removal)
+            model.eval()
+            val_loader = build_val_loader()
+            eval_steps = args.eval_tokens // (args.device_batch_size * args.max_seq_len * ddp_world_size)
+            with disable_fp8(model):
+                bpb_with_rope = evaluate_bpb(model, val_loader, eval_steps, token_bytes)
+            print0(f"Step {step:05d} | Val bpb WITH RoPE: {bpb_with_rope:.6f}")
+            # Now disable RoPE
+            orig_model.use_rope = False
+            # Evaluate WITHOUT RoPE (after removal)
+            val_loader = build_val_loader()
+            with disable_fp8(model):
+                bpb_without_rope = evaluate_bpb(model, val_loader, eval_steps, token_bytes)
+            print0(f"Step {step:05d} | Val bpb WITHOUT RoPE: {bpb_without_rope:.6f}")
+            print0(f"Step {step:05d} | RoPE removal delta: {bpb_without_rope - bpb_with_rope:+.6f}")
+            wandb_run.log({
+                "step": step,
+                "total_training_flops": flops_so_far,
+                "rope_removal/bpb_with_rope": bpb_with_rope,
+                "rope_removal/bpb_without_rope": bpb_without_rope,
+                "rope_removal/delta": bpb_without_rope - bpb_with_rope,
+            })
+            model.train()
 
     # once in a while: evaluate the val bpb (all ranks participate)
     if args.eval_every > 0 and (last_step or step % args.eval_every == 0):
@@ -472,8 +496,11 @@ while True:
             print0(tokenizer.decode(sample[0]))
         model.train()
 
-    # save checkpoint: at the end of the run, or every save_every steps, except at the first step or the resume step
-    if last_step or (step > 0 and step != args.resume_from_step and args.save_every > 0 and step % args.save_every == 0):
+    # save checkpoint: at the end of the run, or at percentage milestones of training
+    pct_now = 100 * step / num_iterations
+    pct_prev = 100 * (step - 1) / num_iterations if step > 0 else -1
+    save_by_pct = args.save_every_pct > 0 and step > 0 and step != args.resume_from_step and (int(pct_now / args.save_every_pct) > int(pct_prev / args.save_every_pct))
+    if last_step or save_by_pct:
         save_checkpoint(
             checkpoint_dir,
             step,
@@ -492,6 +519,7 @@ while True:
                     "min_val_bpb": min_val_bpb,
                     "smooth_train_loss": smooth_train_loss,
                     "total_training_time": total_training_time,
+                    "use_rope": orig_model.use_rope,
                 },
             },
             rank=ddp_rank,

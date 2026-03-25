@@ -8,7 +8,7 @@ Usage (drop-in replacement for FA3):
     from nanochat.flash_attention import flash_attn
 
     # Training (no KV cache)
-    y = flash_attn.flash_attn_func(q, k, v, causal=True, window_size=window_size)
+    y = flash_attn.flash_attn_func(q, k, v, causal=True)
 
     # Inference (with KV cache)
     y = flash_attn.flash_attn_with_kvcache(q, k_cache, v_cache, k=k, v=v, ...)
@@ -66,70 +66,58 @@ USE_FA3 = _resolve_use_fa3()
 # =============================================================================
 # SDPA helpers
 # =============================================================================
-def _sdpa_attention(q, k, v, window_size, enable_gqa):
+def _sdpa_attention(q, k, v, enable_gqa):
     """
-    SDPA attention with sliding window support.
+    SDPA causal attention.
     q, k, v are (B, H, T, D) format.
     """
     Tq = q.size(2)
     Tk = k.size(2)
-    window = window_size[0]
 
     # Full context, same length
-    if (window < 0 or window >= Tq) and Tq == Tk:
+    if Tq == Tk:
         return F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=enable_gqa)
 
     # Single token generation
     if Tq == 1:
-        if window >= 0 and window < Tk:
-            # window is "left" tokens we need to include (window + 1) keys total
-            start = max(0, Tk - (window + 1))
-            k = k[:, :, start:, :]
-            v = v[:, :, start:, :]
         return F.scaled_dot_product_attention(q, k, v, is_causal=False, enable_gqa=enable_gqa)
 
-    # Need explicit mask for sliding window/chunk inference
+    # Chunk inference (Tq != Tk): build explicit causal mask
     device = q.device
-    # For chunk inference (Tq != Tk), is_causal is not aligned to cache position => build an explicit bool mask
     row_idx = (Tk - Tq) + torch.arange(Tq, device=device).unsqueeze(1)
     col_idx = torch.arange(Tk, device=device).unsqueeze(0)
     mask = col_idx <= row_idx
-
-    # sliding window (left)
-    if window >= 0 and window < Tk:
-        mask = mask & ((row_idx - col_idx) <= window)
 
     return F.scaled_dot_product_attention(q, k, v, attn_mask=mask, enable_gqa=enable_gqa)
 
 # =============================================================================
 # Public API: Same interface as FA3
 # =============================================================================
-def flash_attn_func(q, k, v, causal=False, window_size=(-1, -1)):
+def flash_attn_func(q, k, v, causal=False):
     """
     Flash Attention for training (no KV cache).
 
     Args:
         q, k, v: Tensors of shape (B, T, H, D)
         causal: Whether to use causal masking
-        window_size: (left, right) sliding window. -1 means unlimited.
 
     Returns:
         Output tensor of shape (B, T, H, D)
     """
     if USE_FA3:
-        return _fa3.flash_attn_func(q, k, v, causal=causal, window_size=window_size)
+        return _fa3.flash_attn_func(q, k, v, causal=causal)
 
     # SDPA fallback: transpose (B, T, H, D) -> (B, H, T, D)
     q = q.transpose(1, 2)
     k = k.transpose(1, 2)
     v = v.transpose(1, 2)
     enable_gqa = q.size(1) != k.size(1)
-    y = _sdpa_attention(q, k, v, window_size, enable_gqa)
+    y = _sdpa_attention(q, k, v, enable_gqa)
     return y.transpose(1, 2)  # back to (B, T, H, D)
 
 
 def flash_attn_with_kvcache(q, k_cache, v_cache, k=None, v=None, cache_seqlens=None,
-                            causal=False, window_size=(-1, -1)):
+                            causal=False):
     """
     Flash Attention with KV cache for inference.
 
@@ -141,7 +129,6 @@ def flash_attn_with_kvcache(q, k_cache, v_cache, k=None, v=None, cache_seqlens=N
         k, v: New keys/values to insert, shape (B, T_new, H_kv, D)
         cache_seqlens: Current position in cache, shape (B,) int32
         causal: Whether to use causal masking
-        window_size: (left, right) sliding window. -1 means unlimited.
 
     Returns:
         Output tensor of shape (B, T_new, H, D)
@@ -149,7 +136,7 @@ def flash_attn_with_kvcache(q, k_cache, v_cache, k=None, v=None, cache_seqlens=N
     if USE_FA3:
         return _fa3.flash_attn_with_kvcache(
             q, k_cache, v_cache, k=k, v=v, cache_seqlens=cache_seqlens,
-            causal=causal, window_size=window_size
+            causal=causal
         )
 
     # SDPA fallback: manually manage KV cache
@@ -172,7 +159,7 @@ def flash_attn_with_kvcache(q, k_cache, v_cache, k=None, v=None, cache_seqlens=N
     v_sdpa = v_full.transpose(1, 2)
 
     enable_gqa = q_sdpa.size(1) != k_sdpa.size(1)
-    y_sdpa = _sdpa_attention(q_sdpa, k_sdpa, v_sdpa, window_size, enable_gqa)
+    y_sdpa = _sdpa_attention(q_sdpa, k_sdpa, v_sdpa, enable_gqa)
 
     return y_sdpa.transpose(1, 2)  # back to (B, T, H, D)
 

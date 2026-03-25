@@ -24,7 +24,7 @@ RESULTS_FILE="$RESULTS_DIR/results.csv"
 
 # Write CSV header only if file doesn't exist
 if [ ! -f "$RESULTS_FILE" ]; then
-    echo "flops_budget,depth,model_dim,params_wte,params_value_embeds,params_lm_head,params_transformer,params_scalars,params_total,num_iterations,tokens_trained,val_bpb,core_score,train_time_sec" > "$RESULTS_FILE"
+    echo "flops_budget,depth,model_dim,params_wte,params_lm_head,params_transformer,params_total,num_iterations,tokens_trained,val_bpb,core_score,train_time_sec" > "$RESULTS_FILE"
 fi
 
 log() {
@@ -85,7 +85,7 @@ for flops in "${FLOPS_BUDGETS[@]}"; do
             --core-metric-every=999999 \
             --core-metric-max-per-task=-1 \
             --sample-every=-1 \
-            --save-every=-1 \
+            --save-every-pct=-1 \
             $DEVICE_BATCH_SIZE_ARG \
             2>&1 | tee "$RESULTS_DIR/${TAG}_train.log"
 
@@ -99,10 +99,8 @@ for flops in "${FLOPS_BUDGETS[@]}"; do
         # Note: the log format is padded, e.g. "wte                     : 25,165,824"
         # so we grep for "^key " (key at start of line followed by space) to avoid false matches
         PARAMS_WTE=$(grep "^wte " "$LOG_FILE" | tail -1 | grep -oP '[\d,]+' | tr -d ',')
-        PARAMS_VE=$(grep "^value_embeds " "$LOG_FILE" | tail -1 | grep -oP '[\d,]+' | tr -d ',')
         PARAMS_LM=$(grep "^lm_head " "$LOG_FILE" | tail -1 | grep -oP '[\d,]+' | tr -d ',')
         PARAMS_TRANSFORMER=$(grep "^transformer_matrices " "$LOG_FILE" | tail -1 | grep -oP '[\d,]+' | tr -d ',')
-        PARAMS_SCALARS=$(grep "^scalars " "$LOG_FILE" | tail -1 | grep -oP '[\d,]+' | tr -d ',')
         PARAMS_TOTAL=$(grep "^total " "$LOG_FILE" | tail -1 | grep -oP '[\d,]+' | tr -d ',')
 
         NUM_ITERS=$(grep "Calculated number of iterations" "$LOG_FILE" | tail -1 | sed 's/.*: //' | tr -d ',')
@@ -124,7 +122,7 @@ for flops in "${FLOPS_BUDGETS[@]}"; do
         log "  Params: $PARAMS_TOTAL (transformer: $PARAMS_TRANSFORMER), Iters: $NUM_ITERS, Val BPB: $VAL_BPB, CORE: $CORE_SCORE"
 
         # Append to CSV
-        echo "$flops,$d,$MODEL_DIM,$PARAMS_WTE,$PARAMS_VE,$PARAMS_LM,$PARAMS_TRANSFORMER,$PARAMS_SCALARS,$PARAMS_TOTAL,$NUM_ITERS,$TOKENS_TRAINED,$VAL_BPB,$CORE_SCORE,$TRAIN_TIME" >> "$RESULTS_FILE"
+        echo "$flops,$d,$MODEL_DIM,$PARAMS_WTE,$PARAMS_LM,$PARAMS_TRANSFORMER,$PARAMS_TOTAL,$NUM_ITERS,$TOKENS_TRAINED,$VAL_BPB,$CORE_SCORE,$TRAIN_TIME" >> "$RESULTS_FILE"
     done
 done
 
