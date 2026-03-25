@@ -18,7 +18,7 @@ class Task:
         assert stop is None or stop >= start, f"Stop should be greater than or equal to start, got {stop} and {start}"
         assert step >= 1, f"Step must be strictly positive, got {step}"
         self.start = start
-        self.stop = stop # could be None here
+        self.stop = stop
         self.step = step
 
     @property
@@ -37,8 +37,8 @@ class Task:
         stop = self.num_examples() if self.stop is None else self.stop
         step = self.step
         span = stop - start
-        num = (span + step - 1) // step # ceil_div(span, step)
-        assert num >= 0, f"Negative number of examples???: {num}" # prevent footguns
+        num = (span + step - 1) // step
+        assert num >= 0, f"Negative number of examples: {num}"
         return num
 
     def __getitem__(self, index: int):
@@ -71,7 +71,6 @@ class TaskMixture(Task):
         # Deterministically shuffle to mix tasks throughout training
         rng = random.Random(42)
         rng.shuffle(self.index_map)
-        # Note: this is not the most elegant or best solution, but it's ok for now
 
     def num_examples(self):
         return self.num_conversations

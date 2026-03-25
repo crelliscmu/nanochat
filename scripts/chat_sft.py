@@ -127,7 +127,7 @@ grad_accum_steps = args.total_batch_size // world_tokens_per_fwdbwd
 print0(f"Tokens / micro-batch / rank: {args.device_batch_size} x {args.max_seq_len} = {tokens_per_fwdbwd:,}")
 print0(f"Tokens / micro-batch: {world_tokens_per_fwdbwd:,}")
 print0(f"Total batch size {args.total_batch_size:,} => gradient accumulation steps: {grad_accum_steps}")
-token_bytes = get_token_bytes(device=device)
+token_bytes = get_token_bytes(device=device, model_tag=args.model_tag)
 
 # Initialize the Optimizer (combined MuonAdamW: Muon for matrix params, AdamW for rest)
 # Note that pretraining ramps weight_decay to zero by end of pretraining, so SFT continues with zero
@@ -502,7 +502,7 @@ print0(f"Minimum validation bpb: {min_val_bpb:.4f}")
 
 # Log to report
 from nanochat.report import get_report
-get_report().log(section="SFT", data=[
+get_report(model_tag=args.model_tag).log(section="SFT", data=[
     user_config, # CLI args
     { # stats about the training setup
         "Number of iterations": step,

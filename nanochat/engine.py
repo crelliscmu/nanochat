@@ -40,7 +40,7 @@ def eval_with_timeout(formula, max_time=3):
                 return eval(formula, {"__builtins__": {}}, {})
     except Exception as e:
         signal.alarm(0)
-        # print(f"Warning: Failed to eval {formula}, exception: {e}") # it's ok ignore wrong calculator usage
+        # Failed eval is expected for invalid calculator expressions
         return None
 
 def use_calculator(expr):
@@ -168,15 +168,9 @@ class Engine:
 
     @torch.inference_mode()
     def generate(self, tokens, num_samples=1, max_tokens=None, temperature=1.0, top_k=None, seed=42):
-        """Same as generate, but does single prefill and then clones the KV cache."""
+        """Single prefill followed by batched decode with KV cache replication."""
         assert isinstance(tokens, list) and isinstance(tokens[0], int), "expecting list of ints"
         device = self.model.get_device()
-        # NOTE: setting the dtype here and in this way is an ugly hack.
-        # Currently the repo assumes that cuda -> bfloat16 and everything else -> float32.
-        # We need to know the dtype here to call __init__ on KVCache and pre-allocate its tensors.
-        # As a quick hack, we're making generate() function inherit and know about this repo-wise assumption.
-        # I think there has to be a bigger refactor to deal with device/dtype tracking across the codebase.
-        # In particular, the KVCache should allocate its tensors lazily
         dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
         rng = torch.Generator(device=device)
         rng.manual_seed(seed)

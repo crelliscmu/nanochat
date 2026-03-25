@@ -185,8 +185,6 @@ def compute_init(device_type="cuda"): # cuda|cpu|mps
     torch.manual_seed(42)
     if device_type == "cuda":
         torch.cuda.manual_seed(42)
-    # skipping full reproducibility for now, possibly investigate slowdown later
-    # torch.use_deterministic_algorithms(True)
 
     # Precision
     if device_type == "cuda":

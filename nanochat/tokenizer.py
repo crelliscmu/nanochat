@@ -68,10 +68,7 @@ class HuggingFaceTokenizer:
         tokenizer.normalizer = None
         # Pre-tokenizer: GPT-4 style
         # the regex pattern used by GPT-4 to split text into groups before BPE
-        # NOTE: The pattern was changed from \p{N}{1,3} to \p{N}{1,2} because I suspect it is harmful to
-        # very small models and smaller vocab sizes, because it is a little bit wasteful in the token space.
-        # (but I haven't validated this! TODO)
-        gpt4_split_regex = Regex(SPLIT_PATTERN) # huggingface demands that you wrap it in Regex!!
+        gpt4_split_regex = Regex(SPLIT_PATTERN)
         tokenizer.pre_tokenizer = pre_tokenizers.Sequence([
             pre_tokenizers.Split(pattern=gpt4_split_regex, behavior="isolated", invert=False),
             pre_tokenizers.ByteLevel(add_prefix_space=False, use_regex=False)
@@ -233,14 +230,14 @@ class RustBPETokenizer:
         if isinstance(text, str):
             ids = self.enc.encode_ordinary(text)
             if prepend is not None:
-                ids.insert(0, prepend_id) # TODO: slightly inefficient here? :( hmm
+                ids.insert(0, prepend_id)
             if append is not None:
                 ids.append(append_id)
         elif isinstance(text, list):
             ids = self.enc.encode_ordinary_batch(text, num_threads=num_threads)
             if prepend is not None:
                 for ids_row in ids:
-                    ids_row.insert(0, prepend_id) # TODO: same
+                    ids_row.insert(0, prepend_id)
             if append is not None:
                 for ids_row in ids:
                     ids_row.append(append_id)
@@ -387,18 +384,17 @@ class RustBPETokenizer:
 # -----------------------------------------------------------------------------
 # nanochat-specific convenience functions
 
-def get_tokenizer():
+def get_tokenizer(model_tag=None):
     from nanochat.common import get_base_dir
     base_dir = get_base_dir()
-    tokenizer_dir = os.path.join(base_dir, "tokenizer")
-    # return HuggingFaceTokenizer.from_directory(tokenizer_dir)
+    tokenizer_dir = os.path.join(base_dir, "tokenizer", model_tag) if model_tag else os.path.join(base_dir, "tokenizer")
     return RustBPETokenizer.from_directory(tokenizer_dir)
 
-def get_token_bytes(device="cpu"):
+def get_token_bytes(device="cpu", model_tag=None):
     import torch
     from nanochat.common import get_base_dir
     base_dir = get_base_dir()
-    tokenizer_dir = os.path.join(base_dir, "tokenizer")
+    tokenizer_dir = os.path.join(base_dir, "tokenizer", model_tag) if model_tag else os.path.join(base_dir, "tokenizer")
     token_bytes_path = os.path.join(tokenizer_dir, "token_bytes.pt")
     assert os.path.exists(token_bytes_path), f"Token bytes not found at {token_bytes_path}? It gets written by tok_train.py"
     with open(token_bytes_path, "rb") as f:

@@ -208,7 +208,7 @@ def main():
     else:
         model, tokenizer, meta = load_model("base", device, phase="eval", model_tag=args.model_tag, step=args.step)
         sequence_len = meta["model_config"]["sequence_len"]
-        token_bytes = get_token_bytes(device=device)
+        token_bytes = get_token_bytes(device=device, model_tag=args.model_tag)
         model_name = f"base_model (step {meta['step']})"
         model_slug = f"base_model_{meta['step']:06d}"
 
@@ -285,7 +285,8 @@ def main():
         # Write CSV output
         if ddp_rank == 0:
             base_dir = get_base_dir()
-            output_csv_path = os.path.join(base_dir, "base_eval", f"{model_slug}.csv")
+            eval_dir = os.path.join(base_dir, "base_eval", args.model_tag) if args.model_tag else os.path.join(base_dir, "base_eval")
+            output_csv_path = os.path.join(eval_dir, f"{model_slug}.csv")
             os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
             with open(output_csv_path, 'w', encoding='utf-8', newline='') as f:
                 f.write(f"{'Task':<35}, {'Accuracy':<10}, {'Centered':<10}\n")
@@ -314,7 +315,7 @@ def main():
     if unconditioned_samples:
         report_data.append({f"unconditioned {i}": s for i, s in enumerate(unconditioned_samples)})
 
-    get_report().log(section="Base model evaluation", data=report_data)
+    get_report(model_tag=args.model_tag).log(section="Base model evaluation", data=report_data)
 
     compute_cleanup()
 

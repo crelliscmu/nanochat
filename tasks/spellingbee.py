@@ -168,10 +168,7 @@ First spell the word out:
 
 Then count the occurrences of '{letter}':
 """
-        # Little simulated loop of the solution process
-        # TODO: This is where the fun starts, we could simulate cute little mistakes
-        # and get the model to review its work and recover from them.
-        # You might of course hope this could arise in RL too, but realistically you'd want to help it out a bit.
+        # Simulated step-by-step counting of letter occurrences
         running_count = 0
         for i, char in enumerate(word, 1):
             if char == letter:
@@ -290,18 +287,3 @@ if __name__ == "__main__":
                 print(f"{part['text']}>>", end='')
         print()
         print("-" * 100)
-
-    # # preview the SimpleSpelling task, first 10 examples
-    # task = SimpleSpelling()
-    # for i in range(10):
-    #     ex = task.get_example(i)
-    #     print("=" * 100)
-    #     print(ex['messages'][0]['content'])
-    #     print("-" * 100)
-    #     print(ex['messages'][1]['content'])
-
-    # # also scrutinize the tokenization (last example only)
-    # from nanochat.tokenizer import get_tokenizer
-    # tokenizer = get_tokenizer()
-    # ids, mask = tokenizer.render_conversation(ex)
-    # print(tokenizer.visualize_tokenization(ids, mask, with_token_id=True))

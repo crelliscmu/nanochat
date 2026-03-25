@@ -22,10 +22,7 @@ class SmolTalk(Task):
     def get_example(self, index):
         row = self.ds[index]
         messages = row["messages"]
-        # ---------------------------------------------------------------------
-        # sanity checking asserts here
-        # TODO: we could remove these asserts later, for now just don't want any footguns
-        # there is an optional system message at the beginning
+        # Validate conversation structure
         assert len(messages) >= 1
         first_message = messages[0]
         if first_message["role"] == "system":
@@ -38,8 +35,6 @@ class SmolTalk(Task):
             expected_role = "user" if i % 2 == 0 else "assistant"
             assert message["role"] == expected_role, f"Message {i} has role {message['role']} but should be {expected_role}"
             assert isinstance(message["content"], str), "Content must be a string"
-        # ---------------------------------------------------------------------
-        # create and return the Conversation object (ok to emit the system message too)
         conversation = {
             "messages": messages,
         }

@@ -1,7 +1,7 @@
 """
-New and upgraded chat mode because a lot of the code has changed since the last one.
+Interactive chat mode.
 
-Intended to be run single GPU only atm:
+Intended to be run single GPU only:
 python -m scripts.chat_cli
 """
 import argparse

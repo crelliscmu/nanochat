@@ -1,9 +1,6 @@
 """
 Functions for evaluating the CORE metric, as described in the DCLM paper.
 https://arxiv.org/abs/2406.11794
-
-TODOs:
-- All tasks ~match except for squad. We get 31% reference is 37%. Figure out why.
 """
 import random
 

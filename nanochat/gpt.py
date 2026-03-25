@@ -154,7 +154,7 @@ class GPT(nn.Module):
         # As for rotary_seq_len, these rotary embeddings are pretty small/cheap in memory,
         # so let's just over-compute them by 10X, but assert fail if we ever reach that amount.
         # In the future we can dynamically grow the cache, for now it's fine.
-        self.rotary_seq_len = config.sequence_len * 10 # 10X over-compute should be enough, TODO make nicer?
+        self.rotary_seq_len = config.sequence_len * 10
         head_dim = config.n_embd // config.n_head
         cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)
         self.register_buffer("cos", cos, persistent=False) # persistent=False means it's not saved to the checkpoint
@@ -205,7 +205,6 @@ class GPT(nn.Module):
             self.transformer.wte.to(dtype=COMPUTE_DTYPE)
 
     def _precompute_rotary_embeddings(self, seq_len, head_dim, base=100000, device=None):
-        # TODO: bump base theta more? e.g. 100K is more common more recently
         # autodetect the device from model embeddings
         if device is None:
             device = self.transformer.wte.weight.device
@@ -335,7 +334,6 @@ class GPT(nn.Module):
 
         if targets is not None:
             # training: given the targets, compute and return the loss
-            # TODO experiment with chunked cross-entropy?
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1, reduction=loss_reduction)
             return loss
         else:

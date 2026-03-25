@@ -63,7 +63,7 @@ def load_checkpoint(checkpoint_dir, step, device, load_optimizer=False, rank=0):
     return model_data, optimizer_data, meta_data
 
 
-def build_model(checkpoint_dir, step, device, phase):
+def build_model(checkpoint_dir, step, device, phase, model_tag=None):
     """
     A bunch of repetitive code to build a model from a given checkpoint.
     Returns:
@@ -90,7 +90,7 @@ def build_model(checkpoint_dir, step, device, phase):
         model = GPT(model_config)
     # Load the model state
     model.to_empty(device=device)
-    model.init_weights() # note: this is dumb, but we need to init the rotary embeddings. TODO: fix model re-init
+    model.init_weights() # needed to initialize rotary embeddings
     model.load_state_dict(model_data, strict=True, assign=True)
     # Restore RoPE state from checkpoint (may have been disabled mid-training)
     loop_state = meta_data.get("loop_state", {})
@@ -101,7 +101,7 @@ def build_model(checkpoint_dir, step, device, phase):
     else:
         model.train()
     # Load the Tokenizer
-    tokenizer = get_tokenizer()
+    tokenizer = get_tokenizer(model_tag=model_tag)
     # Sanity check: compatibility between model and tokenizer
     assert tokenizer.get_vocab_size() == model_config_kwargs["vocab_size"], f"Tokenizer vocab size {tokenizer.get_vocab_size()} does not match model config vocab size {model_config_kwargs['vocab_size']}"
     return model, tokenizer, meta_data
@@ -150,7 +150,7 @@ def load_model_from_dir(checkpoints_dir, device, phase, model_tag=None, step=Non
     assert step is not None, f"No checkpoints found in {checkpoint_dir}"
     # build the model
     log0(f"Loading model from {checkpoint_dir} with step {step}")
-    model, tokenizer, meta_data = build_model(checkpoint_dir, step, device, phase)
+    model, tokenizer, meta_data = build_model(checkpoint_dir, step, device, phase, model_tag=model_tag)
     return model, tokenizer, meta_data
 
 def load_model(source, *args, **kwargs):

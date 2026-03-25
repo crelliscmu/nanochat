@@ -91,10 +91,8 @@ class GSM8K(Task):
         - the conversation has both user AND assistant message (containing the ground truth answer)
         - the assistant_response is usually the alternative assistant message achieved via sampling
 
-        TODO: Technically, assistant_response should be a Message (either a string or a list of parts)
-              We can handle this later possibly. For now just assume string.
         """
-        assert isinstance(assistant_response, str), "Assuming simple string response for now"
+        assert isinstance(assistant_response, str)
         # First extract the ground truth answer
         assistant_message = conversation['messages'][-1]
         assert assistant_message['role'] == "assistant", "Last message must be from the Assistant"

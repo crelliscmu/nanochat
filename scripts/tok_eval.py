@@ -2,8 +2,13 @@
 Evaluate compression ratio of the tokenizer.
 """
 
+import argparse
 from nanochat.tokenizer import get_tokenizer, RustBPETokenizer
 from nanochat.dataset import parquets_iter_batched
+
+parser = argparse.ArgumentParser(description='Evaluate tokenizer compression ratio')
+parser.add_argument('--model-tag', type=str, default=None, help='Model tag to load tokenizer from')
+args = parser.parse_args()
 
 # Random text I got from a random website this morning
 news_text = r"""
@@ -171,7 +176,7 @@ for tokenizer_name in ["gpt2", "gpt4", "ours"]:
     elif tokenizer_name == "gpt4":
         tokenizer = RustBPETokenizer.from_pretrained("cl100k_base") # gpt-4 base model tokenizer
     else:
-        tokenizer = get_tokenizer()
+        tokenizer = get_tokenizer(model_tag=args.model_tag)
 
     vocab_sizes[tokenizer_name] = tokenizer.get_vocab_size()
     tokenizer_results[tokenizer_name] = {}
@@ -260,6 +265,6 @@ for baseline_name in ["GPT-2", "GPT-4"]:
         lines.append(f"| {name} | {baseline_data['bytes']} | {baseline_data['tokens']} | {baseline_data['ratio']:.2f} | {ours_data['tokens']} | {ours_data['ratio']:.2f} | {relative_diff:+.1f}% |")
     lines.append("")
 report_markdown = "\n".join(lines)
-get_report().log(section="Tokenizer evaluation", data=[
+get_report(model_tag=args.model_tag).log(section="Tokenizer evaluation", data=[
     report_markdown,
 ])

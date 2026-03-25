@@ -104,7 +104,7 @@ def run_categorical_eval(task_object, tokenizer, model, batch_size, max_problems
 
         # Prepare the batch of problems. They might all be of different length, so we pad/collate them.
         conversations = [task_object[ii] for ii in range(i0, i1)]
-        prompt_ids = [tokenizer.render_for_completion(conversation) for conversation in conversations] # TODO: remake the way this works
+        prompt_ids = [tokenizer.render_for_completion(conversation) for conversation in conversations]
         max_length = max(len(ids) for ids in prompt_ids)
         answer_time_positions = [len(ids) - 1 for ids in prompt_ids] # where the last token is (and the predicted answer)
         padded_prompt_ids = [ids + [bos] * (max_length - len(ids)) for ids in prompt_ids]
@@ -242,7 +242,7 @@ if __name__ == "__main__":
             centered_mean += centered_acc
         chatcore_metric = centered_mean / len(results)
         chatcore_metric_dict = {"ChatCORE metric": chatcore_metric}
-    get_report().log(section="Chat evaluation " + args.source, data=[
+    get_report(model_tag=args.model_tag).log(section="Chat evaluation " + args.source, data=[
         vars(args), # CLI args
         results,
         chatcore_metric_dict,

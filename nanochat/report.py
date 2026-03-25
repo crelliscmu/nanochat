@@ -1,5 +1,5 @@
 """
-Utilities for generating training report cards. More messy code than usual, will fix.
+Utilities for generating training report cards.
 """
 
 import os
@@ -397,12 +397,12 @@ class DummyReport:
     def reset(self, *args, **kwargs):
         pass
 
-def get_report():
+def get_report(model_tag=None):
     # just for convenience, only rank 0 logs to report
     from nanochat.common import get_base_dir, get_dist_info
     ddp, ddp_rank, ddp_local_rank, ddp_world_size = get_dist_info()
     if ddp_rank == 0:
-        report_dir = os.path.join(get_base_dir(), "report")
+        report_dir = os.path.join(get_base_dir(), "report", model_tag) if model_tag else os.path.join(get_base_dir(), "report")
         return Report(report_dir)
     else:
         return DummyReport()
@@ -411,8 +411,9 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Generate or reset nanochat training reports.")
     parser.add_argument("command", nargs="?", default="generate", choices=["generate", "reset"], help="Operation to perform (default: generate)")
+    parser.add_argument("--model-tag", type=str, default=None, help="Model tag to segment report directory")
     args = parser.parse_args()
     if args.command == "generate":
-        get_report().generate()
+        get_report(model_tag=args.model_tag).generate()
     elif args.command == "reset":
-        get_report().reset()
+        get_report(model_tag=args.model_tag).reset()

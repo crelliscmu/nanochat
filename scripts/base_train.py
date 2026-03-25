@@ -114,8 +114,8 @@ else:
 
 # -----------------------------------------------------------------------------
 # Tokenizer will be useful for evaluation and also we need the vocab size to init the model
-tokenizer = get_tokenizer()
-token_bytes = get_token_bytes(device=device)
+tokenizer = get_tokenizer(model_tag=args.model_tag)
+token_bytes = get_token_bytes(device=device, model_tag=args.model_tag)
 vocab_size = tokenizer.get_vocab_size()
 print0(f"Vocab size: {vocab_size:,}")
 
@@ -166,7 +166,6 @@ if args.fp8:
     else:
         # our custom fp8 is simpler than torchao, written for exact API compatibility
         from nanochat.fp8 import Float8LinearConfig, convert_to_float8_training
-        # from torchao.float8 import Float8LinearConfig, convert_to_float8_training
         import torch.nn as nn
 
         # Filter: dims must be divisible by 16 (FP8 hardware requirement) large enough
@@ -525,7 +524,6 @@ while True:
             rank=ddp_rank,
         )
 
-    # termination conditions (TODO: possibly also add loss explosions etc.)
     if last_step:
         break
 
@@ -628,7 +626,7 @@ if val_bpb is not None:
 
 # Log to report
 from nanochat.report import get_report
-get_report().log(section="Base model training", data=[
+get_report(model_tag=output_dirname).log(section="Base model training", data=[
     user_config, # CLI args
     { # stats about the training setup
         "Number of parameters": num_params,
