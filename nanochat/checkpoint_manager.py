@@ -22,11 +22,18 @@ def log0(message):
 
 def _patch_missing_config_keys(model_config_kwargs):
     """Strip removed config keys and add defaults for missing ones in old checkpoints."""
-    pass
+    for key in ["window_pattern"]:
+        if key in model_config_kwargs:
+            log0(f"Stripping removed config key: {key}")
+            del model_config_kwargs[key]
 
 def _patch_missing_keys(model_data, model_config):
-    """Add default values for new parameters that may be missing in old checkpoints."""
-    pass
+    """Strip removed parameters and add defaults for missing ones in old checkpoints."""
+    removed_prefixes = ("resid_lambdas", "x0_lambdas", "smear_gate.", "smear_lambda", "backout_lambda", "value_embeds.")
+    keys_to_remove = [k for k in model_data if any(k == p or k.startswith(p) for p in removed_prefixes)]
+    for k in keys_to_remove:
+        del model_data[k]
+        log0(f"Stripped removed key from checkpoint: {k}")
 
 def save_checkpoint(checkpoint_dir, step, model_data, optimizer_data, meta_data, rank=0):
     if rank == 0:

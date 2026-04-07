@@ -2,8 +2,11 @@
 __pycache__/
 *.pyc
 dev-ignore/
-report.md
+*report.md
 eval_bundle/
+*.out
+
+
 
 # Secrets
 .env

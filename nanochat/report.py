@@ -244,9 +244,10 @@ def extract_timestamp(content, prefix):
 class Report:
     """Maintains a bunch of logs, generates a final markdown report."""
 
-    def __init__(self, report_dir):
+    def __init__(self, report_dir, model_tag=None):
         os.makedirs(report_dir, exist_ok=True)
         self.report_dir = report_dir
+        self.model_tag = model_tag
 
     def log(self, section, data):
         """Log a section of data to the report."""
@@ -364,8 +365,9 @@ class Report:
             else:
                 out_file.write("Total wall clock time: unknown\n")
         # also cp the report.md file to current directory
-        print(f"Copying report.md to current directory for convenience")
-        shutil.copy(report_file, "report.md")
+        dest_name = f"{self.model_tag}_report.md" if self.model_tag else "report.md"
+        print(f"Copying report.md to current directory as {dest_name} for convenience")
+        shutil.copy(report_file, dest_name)
         return report_file
 
     def reset(self):
@@ -403,7 +405,7 @@ def get_report(model_tag=None):
     ddp, ddp_rank, ddp_local_rank, ddp_world_size = get_dist_info()
     if ddp_rank == 0:
         report_dir = os.path.join(get_base_dir(), "report", model_tag) if model_tag else os.path.join(get_base_dir(), "report")
-        return Report(report_dir)
+        return Report(report_dir, model_tag=model_tag)
     else:
         return DummyReport()
 

@@ -18,6 +18,17 @@ export OMP_NUM_THREADS=1
 export NANOCHAT_BASE_DIR="${NANOCHAT_BASE_DIR:-$HOME/.cache/nanochat}"
 source .venv/bin/activate
 
+# All sweep runs share a single tokenizer trained under this tag. Each per-run
+# model_tag is symlinked to it inside the loop, since base_train loads the
+# tokenizer from tokenizer/<model_tag>/.
+TOK_TAG="scaling_${LABEL}_tok"
+TOKENIZER_BASE_DIR="$NANOCHAT_BASE_DIR/tokenizer"
+if [ ! -d "$TOKENIZER_BASE_DIR/$TOK_TAG" ]; then
+    # Need ~1000 shards for the largest sweep runs (matches miniseries.sh).
+    python -m nanochat.dataset -n 1000
+    python -m scripts.tok_train --max-chars=2000000000 --vocab-size=32768 --model-tag="${TOK_TAG}"
+fi
+
 RESULTS_DIR="$NANOCHAT_BASE_DIR/scaling_laws_results_${LABEL}"
 mkdir -p "$RESULTS_DIR"
 RESULTS_FILE="$RESULTS_DIR/results.csv"
@@ -59,6 +70,10 @@ for flops in "${FLOPS_BUDGETS[@]}"; do
 
         # Unique tag for this run
         TAG="scaling_${flops}_d${d}"
+
+        # Point this run's model_tag at the shared tokenizer (relative symlink).
+        mkdir -p "$TOKENIZER_BASE_DIR"
+        ln -sfn "$TOK_TAG" "$TOKENIZER_BASE_DIR/$TAG"
 
         # Reduce --device-batch-size to avoid OOM at larger depths
         if [ $d -ge 28 ]; then

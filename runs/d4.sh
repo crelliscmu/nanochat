@@ -6,11 +6,11 @@
 # It is designed to run on a single H100 GPU.
 
 # 1) Example launch (simplest):
-# bash runs/d12.sh
+# bash runs/d4.sh
 # 2) Example launch in a screen session:
-# screen -L -Logfile runs/d12.log -S d12 bash runs/d12.sh
+# screen -L -Logfile runs/d4.log -S d4 bash runs/d4.sh
 # 3) Example launch with wandb logging, but see below for setting up wandb first:
-# WANDB_RUN=d12 screen -L -Logfile runs/d12.log -S d12 bash runs/d12.sh
+# WANDB_RUN=d4 screen -L -Logfile runs/d4.log -S d4 bash runs/d4.sh
 
 # Default intermediate artifacts directory is in ~/.cache/nanochat
 export OMP_NUM_THREADS=1
@@ -35,7 +35,7 @@ source .venv/bin/activate
 # 1) Make sure to first log in to wandb, e.g. run:
 #    `wandb login`
 # 2) Set the WANDB_RUN environment variable when running this script, e.g.:
-#    `WANDB_RUN=d12 bash runs/d12.sh`
+#    `WANDB_RUN=d4 bash runs/d4.sh`
 if [ -z "$WANDB_RUN" ]; then
     # by default use "dummy" : it's handled as a special case, skips logging to wandb
     WANDB_RUN=dummy
@@ -45,7 +45,7 @@ fi
 # During the course of the run, we will be writing markdown reports to the report/
 # directory in the base dir. This command clears it out and writes a header section
 # with a bunch of system info and a timestamp that marks the start of the run.
-python -m nanochat.report reset --model-tag d12
+python -m nanochat.report reset --model-tag d4
 
 # -----------------------------------------------------------------------------
 # Tokenizer
@@ -62,19 +62,19 @@ python -m nanochat.dataset -n 8
 python -m nanochat.dataset -n 170 &
 DATASET_DOWNLOAD_PID=$!
 # train the tokenizer with vocab size 2**15 = 32768 on ~2B characters of data
-python -m scripts.tok_train --model-tag d12
+python -m scripts.tok_train --model-tag d4
 # evaluate the tokenizer (report compression ratio etc.)
-python -m scripts.tok_eval --model-tag d12
+python -m scripts.tok_eval --model-tag d4
 
 # -----------------------------------------------------------------------------
 # Base model (pretraining)
 echo "Waiting for dataset download to complete..."
 wait $DATASET_DOWNLOAD_PID
 
-# d12 model
-torchrun --standalone --nproc_per_node=1 -m scripts.base_train -- --depth=12 --model-tag d12 --target-param-data-ratio=9 --device-batch-size=16 --fp8 --run=$WANDB_RUN
+# d4 model
+torchrun --standalone --nproc_per_node=1 -m scripts.base_train -- --depth=4 --model-tag d4 --target-param-data-ratio=9 --device-batch-size=16 --fp8 --run=$WANDB_RUN
 # evaluate the model: CORE metric, BPB on train/val, and draw samples
-torchrun --standalone --nproc_per_node=1 -m scripts.base_eval -- --model-tag d12 --device-batch-size=16
+torchrun --standalone --nproc_per_node=1 -m scripts.base_eval -- --model-tag d4 --device-batch-size=16
 
 # -----------------------------------------------------------------------------
 # SFT (teach the model conversation special tokens, tool use, multiple choice)
@@ -84,8 +84,8 @@ torchrun --standalone --nproc_per_node=1 -m scripts.base_eval -- --model-tag d12
 curl -L -o $NANOCHAT_BASE_DIR/identity_conversations.jsonl https://karpathy-public.s3.us-west-2.amazonaws.com/identity_conversations.jsonl
 
 # run SFT and eval the model
-torchrun --standalone --nproc_per_node=1 -m scripts.chat_sft -- --model-tag d12 --device-batch-size=16 --run=$WANDB_RUN
-torchrun --standalone --nproc_per_node=1 -m scripts.chat_eval -- --model-tag d12 -i sft
+torchrun --standalone --nproc_per_node=1 -m scripts.chat_sft -- --model-tag d4 --device-batch-size=16 --run=$WANDB_RUN
+torchrun --standalone --nproc_per_node=1 -m scripts.chat_eval -- --model-tag d4 -i sft
 
 # chat with the model over CLI! Leave out the -p to chat interactively
 # python -m scripts.chat_cli -p "Why is the sky blue?"
@@ -96,4 +96,4 @@ torchrun --standalone --nproc_per_node=1 -m scripts.chat_eval -- --model-tag d12
 # -----------------------------------------------------------------------------
 # Generate the full report by putting together all the sections
 # report.md is the output and will be copied to current directory for convenience
-python -m nanochat.report generate --model-tag d12
+python -m nanochat.report generate --model-tag d4
