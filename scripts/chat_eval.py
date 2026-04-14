@@ -12,8 +12,9 @@ import argparse
 from functools import partial
 import torch
 import torch.distributed as dist
+import wandb
 
-from nanochat.common import compute_init, compute_cleanup, get_dist_info, print0, autodetect_device_type
+from nanochat.common import compute_init, compute_cleanup, get_dist_info, print0, autodetect_device_type, DummyWandb
 from nanochat.checkpoint_manager import load_model
 from nanochat.engine import Engine
 
@@ -192,6 +193,7 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--step', type=int, default=None, help='Step to load')
     parser.add_argument('-x', '--max-problems', type=int, default=None, help='Max problems to evaluate')
     parser.add_argument('--device-type', type=str, default='', choices=['cuda', 'cpu', 'mps'], help='Device type for evaluation: cuda|cpu|mps. empty => autodetect')
+    parser.add_argument('--run', type=str, default='dummy', help="wandb run name ('dummy' disables wandb logging)")
     args = parser.parse_args()
 
     device_type = autodetect_device_type() if args.device_type == "" else args.device_type
@@ -199,6 +201,17 @@ if __name__ == "__main__":
 
     model, tokenizer, meta = load_model(args.source, device, phase="eval", model_tag=args.model_tag, step=args.step)
     engine = Engine(model, tokenizer)
+
+    # wandb logging init (only on rank 0, disabled when --run=dummy)
+    master_process = ddp_rank == 0
+    model_slug = f"{args.model_tag or 'model'}_step{meta['step']:06d}"
+    use_wandb = args.run != "dummy" and master_process
+    wandb_run = wandb.init(
+        project="nanochat_evals",
+        name=f"{args.source}/{model_slug}",
+        config=vars(args),
+        tags=[args.source, "chat_eval"],
+    ) if use_wandb else DummyWandb()
 
     # Get the tasks to evaluate on
     all_tasks = ['ARC-Easy', 'ARC-Challenge', 'MMLU', 'GSM8K', 'HumanEval', 'SpellingBee']
@@ -242,6 +255,16 @@ if __name__ == "__main__":
             centered_mean += centered_acc
         chatcore_metric = centered_mean / len(results)
         chatcore_metric_dict = {"ChatCORE metric": chatcore_metric}
+
+    # Log to wandb
+    wandb_log = {}
+    for task_name, acc in results.items():
+        wandb_log[f"accuracy/{task_name}"] = acc
+    if chatcore_metric_dict:
+        wandb_log["ChatCORE_metric"] = chatcore_metric_dict["ChatCORE metric"]
+    wandb_run.log(wandb_log)
+    wandb_run.finish()
+
     get_report(model_tag=args.model_tag).log(section="Chat evaluation " + args.source, data=[
         vars(args), # CLI args
         results,

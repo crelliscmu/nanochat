@@ -151,10 +151,10 @@ class GPT(nn.Module):
         })
         self.lm_head = Linear(config.n_embd, padded_vocab_size, bias=False)
         # To support meta device initialization, we init the rotary embeddings here, but it's just "fake" meta tensors only.
-        # As for rotary_seq_len, these rotary embeddings are pretty small/cheap in memory,
-        # so let's just over-compute them by 10X, but assert fail if we ever reach that amount.
-        # In the future we can dynamically grow the cache, for now it's fine.
-        self.rotary_seq_len = config.sequence_len * 10
+        # Rotary embeddings are pretty small/cheap in memory, so we just over-allocate to a fixed 128k
+        # regardless of training sequence_len. This leaves room for length-extrapolation eval without
+        # needing to grow the cache, and ensures the cap is independent of how the model was trained.
+        self.rotary_seq_len = max(131072, config.sequence_len)
         head_dim = config.n_embd // config.n_head
         cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)
         self.register_buffer("cos", cos, persistent=False) # persistent=False means it's not saved to the checkpoint

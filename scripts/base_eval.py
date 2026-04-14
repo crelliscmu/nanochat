@@ -30,14 +30,14 @@ import zipfile
 import tempfile
 import argparse
 import torch
+import wandb
 
-from nanochat.common import compute_init, compute_cleanup, print0, get_base_dir, autodetect_device_type, download_file_with_lock
+from nanochat.common import compute_init, compute_cleanup, print0, get_base_dir, autodetect_device_type, download_file_with_lock, DummyWandb
 from nanochat.tokenizer import HuggingFaceTokenizer, get_token_bytes
 from nanochat.checkpoint_manager import load_model
 from nanochat.core_eval import evaluate_task
 from nanochat.dataloader import tokenizing_distributed_data_loader_bos_bestfit
 from nanochat.loss_eval import evaluate_bpb
-from nanochat.engine import Engine
 
 # -----------------------------------------------------------------------------
 # HuggingFace loading utilities
@@ -177,19 +177,21 @@ def evaluate_core(model, tokenizer, device, max_per_task=-1):
 
 def main():
     parser = argparse.ArgumentParser(description="Base model evaluation")
-    parser.add_argument('--eval', type=str, default='core,bpb,sample', help='Comma-separated evaluations to run: core,bpb,sample (default: all)')
+    parser.add_argument('--eval', type=str, default='core,bpb', help='Comma-separated evaluations to run: core,bpb (default: all)')
     parser.add_argument('--hf-path', type=str, default=None, help='HuggingFace model path (e.g. openai-community/gpt2-xl)')
     parser.add_argument('--model-tag', type=str, default=None, help='nanochat model tag to identify the checkpoint directory')
     parser.add_argument('--step', type=int, default=None, help='Model step to load (default = last)')
     parser.add_argument('--max-per-task', type=int, default=-1, help='Max examples per CORE task (-1 = all)')
     parser.add_argument('--device-batch-size', type=int, default=32, help='Per-device batch size for BPB evaluation')
+    parser.add_argument('--max-seq-len', type=int, default=None, help='Override sequence_len from checkpoint meta (e.g. for length extrapolation eval)')
     parser.add_argument('--split-tokens', type=int, default=40*524288, help='Number of tokens to evaluate per split for BPB')
     parser.add_argument('--device-type', type=str, default='', help='cuda|cpu|mps (empty = autodetect)')
+    parser.add_argument('--run', type=str, default='dummy', help="wandb run name ('dummy' disables wandb logging)")
     args = parser.parse_args()
 
     # Parse evaluation modes
     eval_modes = set(mode.strip() for mode in args.eval.split(','))
-    valid_modes = {'core', 'bpb', 'sample'}
+    valid_modes = {'core', 'bpb'}
     invalid = eval_modes - valid_modes
     if invalid:
         parser.error(f"Invalid eval modes: {invalid}. Valid: {valid_modes}")
@@ -211,51 +213,31 @@ def main():
         token_bytes = get_token_bytes(device=device, model_tag=args.model_tag)
         model_name = f"base_model (step {meta['step']})"
         model_slug = f"base_model_{meta['step']:06d}"
+    if args.max_seq_len is not None:
+        # RoPE cache is precomputed at 10x training sequence_len (see GPT.__init__),
+        # so this allows length extrapolation eval up to that limit.
+        rotary_cap = getattr(model, "rotary_seq_len", None)
+        if rotary_cap is not None and args.max_seq_len > rotary_cap:
+            parser.error(f"--max-seq-len={args.max_seq_len} exceeds RoPE cache size {rotary_cap}")
+        print0(f"Overriding sequence_len: {sequence_len} -> {args.max_seq_len}")
+        sequence_len = args.max_seq_len
 
     print0(f"Evaluating model: {model_name}")
     print0(f"Eval modes: {', '.join(sorted(eval_modes))}")
 
+    # wandb logging init (only on rank 0, disabled when --run=dummy)
+    master_process = ddp_rank == 0
+    use_wandb = args.run != "dummy" and master_process
+    wandb_run = wandb.init(
+        project="nanochat_evals",
+        name=f"base/{args.model_tag}",
+        config=vars(args),
+        tags=["base"] + sorted(eval_modes),
+    ) if use_wandb else DummyWandb()
+
     # Results to log
     core_results = None
     bpb_results = {}
-    samples = []
-    unconditioned_samples = []
-
-    # --- Sampling ---
-    if 'sample' in eval_modes and not is_hf_model:
-        print0("\n" + "="*80)
-        print0("Model Samples")
-        print0("="*80)
-        if ddp_rank == 0:
-            prompts = [
-                "The capital of France is",
-                "The chemical symbol of gold is",
-                "If yesterday was Friday, then tomorrow will be",
-                "The opposite of hot is",
-                "The planets of the solar system are:",
-                "My favorite color is",
-                "If 5*x + 3 = 13, then x is",
-            ]
-            engine = Engine(model, tokenizer)
-            print0("\nConditioned samples:")
-            for prompt in prompts:
-                tokens = tokenizer(prompt, prepend="<|bos|>")
-                sample, _ = engine.generate_batch(tokens, num_samples=1, max_tokens=16, temperature=0)
-                sample_str = tokenizer.decode(sample[0])
-                print0("-" * 80)
-                print0(sample_str)
-                samples.append(sample_str)
-
-            print0("\nUnconditioned samples:")
-            tokens = tokenizer("", prepend="<|bos|>")
-            uncond, _ = engine.generate_batch(tokens, num_samples=8, max_tokens=128, temperature=1.0)
-            for sample in uncond:
-                sample_str = tokenizer.decode(sample)
-                print0("-" * 80)
-                print0(sample_str)
-                unconditioned_samples.append(sample_str)
-    elif 'sample' in eval_modes and is_hf_model:
-        print0("\nSkipping sampling for HuggingFace models (not supported)")
 
     # --- BPB evaluation ---
     if 'bpb' in eval_modes:
@@ -298,6 +280,20 @@ def main():
             print0(f"\nResults written to: {output_csv_path}")
             print0(f"CORE metric: {core_results['core_metric']:.4f}")
 
+    # --- Log to wandb ---
+    wandb_log = {"model": model_name}
+    if core_results:
+        wandb_log["core_metric"] = core_results["core_metric"]
+        for label, acc in core_results["results"].items():
+            wandb_log[f"core/{label}"] = acc
+        for label, centered in core_results["centered_results"].items():
+            wandb_log[f"core_centered/{label}"] = centered
+    if bpb_results:
+        for split_name, bpb in bpb_results.items():
+            wandb_log[f"bpb/{split_name}"] = bpb
+    wandb_run.log(wandb_log)
+    wandb_run.finish()
+
     # --- Log to report ---
     from nanochat.report import get_report
     report_data = [{"model": model_name}]
@@ -309,11 +305,6 @@ def main():
     if bpb_results:
         report_data[0]["train bpb"] = bpb_results.get("train")
         report_data[0]["val bpb"] = bpb_results.get("val")
-
-    if samples:
-        report_data.append({f"sample {i}": s for i, s in enumerate(samples)})
-    if unconditioned_samples:
-        report_data.append({f"unconditioned {i}": s for i, s in enumerate(unconditioned_samples)})
 
     get_report(model_tag=args.model_tag).log(section="Base model evaluation", data=report_data)
 

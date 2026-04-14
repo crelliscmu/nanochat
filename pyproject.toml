@@ -64,6 +64,11 @@ cpu = [
 gpu = [
     "torch==2.9.1",
 ]
+longcontext = [
+    "rouge-score>=0.1.2",
+    "fuzzywuzzy>=0.18.0",
+    "python-Levenshtein>=0.25.0",
+]
 
 [tool.uv]
 conflicts = [
