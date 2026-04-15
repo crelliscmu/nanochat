@@ -54,7 +54,7 @@ def _split_into_entries(completion, prefix):
     parts = re.split(re.escape(delimiter), completion)
     # parts[0] is preamble; entries start at parts[1].
     entries = {}  # entry_index (int) -> entry_text (str)
-    entry_re = re.compile(r"^\s*(\d+)")
+    entry_re = re.compile(r"^\s*(\d{1,6})(?!\d)")
     for chunk in parts[1:]:
         m = entry_re.match(chunk)
         if not m:
