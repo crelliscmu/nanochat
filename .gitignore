@@ -15,6 +15,10 @@ z_slurm/
 CLAUDE.md
 wandb/
 *.egg-info/
-#runs/
+runs/
+long_runs/
 remaining_evals/
 nanochat_pkg/
+nanochat_pkg
+archive_wandb/
+dev/archive/
