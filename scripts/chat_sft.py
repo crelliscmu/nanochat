@@ -55,7 +55,8 @@ parser.add_argument("--run", type=str, default="not_dummy", help="wandb run name
 # Runtime
 parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (empty = autodetect)")
 # Model loading
-parser.add_argument("--model-tag", type=str, default=None, help="model tag to load from")
+parser.add_argument("--model-tag", type=str, default=None, help="model tag to save under (and load from if --source-tag is not set)")
+parser.add_argument("--source-tag", type=str, default=None, help="if set, load the model from this tag instead of --model-tag (saving still uses --model-tag)")
 parser.add_argument("--model-step", type=int, default=None, help="model step to load from")
 parser.add_argument("--load-optimizer", type=int, default=1, help="warm-start optimizer from pretrained checkpoint (0=no, 1=yes)")
 # Training horizon
@@ -111,8 +112,9 @@ wandb_run = DummyWandb() if use_dummy_wandb else wandb.init(entity="789_project"
 if not HAS_FA3:
     print0("WARNING: Flash Attention 3 not available, using PyTorch SDPA fallback. Training will be less efficient.")
 
-# Load the model and tokenizer
-model, tokenizer, meta = load_model("base", device, phase="train", model_tag=args.model_tag, step=args.model_step)
+# Load the model and tokenizer (from source_tag if provided, otherwise model_tag)
+load_tag = args.source_tag if args.source_tag is not None else args.model_tag
+model, tokenizer, meta = load_model("base", device, phase="train", model_tag=load_tag, step=args.model_step)
 
 # Inherit training hyperparameters from pretrained checkpoint (None = inherit, explicit value = override)
 pretrain_user_config = meta.get("user_config", {})
@@ -146,7 +148,7 @@ grad_accum_steps = args.total_batch_size // world_tokens_per_fwdbwd
 print0(f"Tokens / micro-batch / rank: {args.device_batch_size} x {args.max_seq_len} = {tokens_per_fwdbwd:,}")
 print0(f"Tokens / micro-batch: {world_tokens_per_fwdbwd:,}")
 print0(f"Total batch size {args.total_batch_size:,} => gradient accumulation steps: {grad_accum_steps}")
-token_bytes = get_token_bytes(device=device, model_tag=args.model_tag)
+token_bytes = get_token_bytes(device=device, model_tag=load_tag)
 
 # Initialize the Optimizer (combined MuonAdamW: Muon for matrix params, AdamW for rest)
 # Note that pretraining ramps weight_decay to zero by end of pretraining, so SFT continues with zero
@@ -158,7 +160,7 @@ optimizer = model.setup_optimizer(unembedding_lr=args.unembedding_lr, embedding_
 # restore our fresh SFT LRs after loading.
 base_dir = get_base_dir()
 if args.load_optimizer:
-    optimizer_data = load_optimizer_state("base", device, rank=ddp_rank, model_tag=args.model_tag, step=args.model_step)
+    optimizer_data = load_optimizer_state("base", device, rank=ddp_rank, model_tag=load_tag, step=args.model_step)
     if optimizer_data is not None:
         base_lrs = [group["lr"] for group in optimizer.param_groups]
         optimizer.load_state_dict(optimizer_data)
