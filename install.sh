@@ -11,5 +11,6 @@ source .venv/bin/activate
 
 echo "Patching installed transformers with NanoChat model"
 python "$REPO_ROOT/dev/patch_transformers_nanochat.py"
+uv pip install -e .
 
 echo "Done."

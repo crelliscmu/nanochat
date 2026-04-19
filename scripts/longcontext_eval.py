@@ -199,7 +199,7 @@ def main():
         parser.error(f"HF checkpoint dir not found: {hf_path}")
 
     # Register the nanochat vLLM plugin (NanoChatForCausalLM -> nanochat.vllm_nanochat).
-    if "nanochat" in hf_path:
+    if "tpp" in hf_path:
         register_nanochat_vllm()
     else:
         print0(f"Skipping nanochat vLLM plugin registration for {hf_path}")
