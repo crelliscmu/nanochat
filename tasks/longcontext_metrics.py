@@ -105,34 +105,41 @@ def classification_score(prediction, ground_truths, all_classes=None, **_kwargs)
 
 
 def retrieval_score(prediction, ground_truths, **_kwargs):
-    """LongBench passage_retrieval_en: extract Paragraph N from prediction."""
-    pattern = r"Paragraph (\d+)"
-    matches = re.findall(pattern, prediction)
-    if not matches:
+    """LongBench passage_retrieval_en: fraction of numbers in prediction that match the gold paragraph id."""
+    pred_numbers = re.findall(r"\d+", prediction)
+    if not pred_numbers:
         return 0.0
-    pred_para = matches[0]
+    scores = []
     for gt in ground_truths:
-        gt_matches = re.findall(pattern, gt)
-        if gt_matches and gt_matches[0] == pred_para:
-            return 1.0
-    return 0.0
+        gt_matches = re.findall(r"Paragraph (\d+)", gt)
+        if not gt_matches:
+            gt_matches = re.findall(r"\d+", gt)
+        if not gt_matches:
+            continue
+        gt_id = gt_matches[0]
+        right = sum(1 for n in pred_numbers if n == gt_id)
+        scores.append(right / len(pred_numbers))
+    return max(scores) if scores else 0.0
 
 
 def count_score(prediction, ground_truths, **_kwargs):
-    """LongBench passage_count: extract integer from prediction and check exact match."""
-    nums = re.findall(r"\d+", prediction)
-    if not nums:
+    """LongBench passage_count: fraction of predicted numbers that match the gold count."""
+    numbers = re.findall(r"\d+", prediction)
+    if not numbers:
         return 0.0
-    pred_num = nums[0]
+    scores = []
     for gt in ground_truths:
-        gt_nums = re.findall(r"\d+", gt)
-        if gt_nums and gt_nums[0] == pred_num:
-            return 1.0
-    return 0.0
+        gt_num = str(gt).strip()
+        right = sum(1 for n in numbers if n == gt_num)
+        scores.append(right / len(numbers))
+    return max(scores) if scores else 0.0
 
 
 def code_sim_score(prediction, ground_truths, **_kwargs):
-    """LongBench lcc / repobench-p: fuzzy similarity on the first non-comment line."""
+    """LongBench lcc / repobench-p: fuzzy similarity on the first non-comment line.
+
+    Matches THUDM upstream: pick the first line that contains none of `, #, //.
+    """
     if fuzz is None:
         raise ImportError(
             "code_sim_score requires the `fuzzywuzzy` package. "
@@ -140,9 +147,12 @@ def code_sim_score(prediction, ground_truths, **_kwargs):
         )
     if not ground_truths:
         return 0.0
-    # The reference impl picks the first non-comment, non-empty line of the prediction.
-    pred_lines = [ln for ln in prediction.split("\n") if ln.strip() and not ln.strip().startswith("#")]
-    pred_first = pred_lines[0] if pred_lines else prediction
+    all_lines = prediction.lstrip("\n").split("\n")
+    pred_first = ""
+    for line in all_lines:
+        if ("`" not in line) and ("#" not in line) and ("//" not in line):
+            pred_first = line
+            break
     scores = [fuzz.ratio(pred_first, gt) / 100.0 for gt in ground_truths]
     return max(scores)
 

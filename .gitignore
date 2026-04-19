@@ -14,3 +14,7 @@ z_slurm/
 # Local setup
 CLAUDE.md
 wandb/
+*.egg-info/
+runs/
+remaining_evals/
+nanochat_pkg/

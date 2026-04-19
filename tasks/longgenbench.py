@@ -45,10 +45,10 @@ def _split_into_entries(completion, prefix):
     section boundaries. Entries are returned in the order they appear in the
     completion.
     """
-    # Strip the per-entry index from the prefix to get the section delimiter,
-    # e.g. "#*# Week 1 (...)" -> "#*# Week"
-    delimiter_match = re.match(r"^(\S+\s+\S+?)\s*\d", prefix)
-    delimiter = delimiter_match.group(1) if delimiter_match else prefix.split()[0]
+    # Strip the per-entry index from the prefix to get the section delimiter.
+    # Handles multi-word type names like "#*# Menu Week 1 (...)" -> "#*# Menu Week".
+    delimiter_match = re.match(r"^(.+?)\s*\d", prefix)
+    delimiter = delimiter_match.group(1).rstrip() if delimiter_match else prefix.split()[0]
 
     # Split on the delimiter; the first chunk is anything before the first marker.
     parts = re.split(re.escape(delimiter), completion)

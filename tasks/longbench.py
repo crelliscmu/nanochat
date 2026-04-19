@@ -180,6 +180,17 @@ DATASET2MAXLEN = {
 
 ENGLISH_SUBSETS = tuple(DATASET2PROMPT.keys())
 
+# Subsets where upstream eval.py truncates the prediction to its first non-empty line
+# before scoring. See https://github.com/THUDM/LongBench/blob/main/eval.py
+FIRST_LINE_SUBSETS = {"trec", "triviaqa", "samsum"}
+
+
+def _first_line(text):
+    for line in text.lstrip("\n").split("\n"):
+        if line.strip():
+            return line
+    return ""
+
 
 class LongBench(Task):
 
@@ -227,6 +238,8 @@ class LongBench(Task):
         }
 
     def evaluate(self, conversation, completion):
+        if self.subset in FIRST_LINE_SUBSETS:
+            completion = _first_line(completion)
         return float(self.metric_fn(
             completion,
             conversation["answers"],

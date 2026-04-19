@@ -31,12 +31,27 @@ from tasks.mmlu import MMLU
 from tasks.smoltalk import SmolTalk
 from tasks.customjson import CustomJSON
 from tasks.spellingbee import SimpleSpelling, SpellingBee
+from tasks.tulu_long import TuluLongMix
+# ---- TEMPLATE: import new SFT task classes here (see tasks/template_sft.py) ----
+# from tasks.my_new_task import MyNewTask
+# -------------------------------------------------------------------------------
+
+# =============================================================================
+# TEMPLATE: adding a new SFT training dataset
+#   1. Create a Task subclass in tasks/<name>.py (copy tasks/template_sft.py).
+#   2. Import it above (see TEMPLATE import marker).
+#   3. (Optional) Add a CLI flag below (see TEMPLATE CLI marker) to control
+#      epochs or row count so you don't have to edit code to tune mixture.
+#   4. Append the task to `train_tasks` (see TEMPLATE train-mixture marker).
+#   5. (Optional) Add it to `val_dataset` (see TEMPLATE val-mixture marker)
+#      so its held-out split contributes to the val bpb.
+# =============================================================================
 
 # -----------------------------------------------------------------------------
 # CLI arguments
 parser = argparse.ArgumentParser(description="Supervised fine-tuning (SFT) the model")
 # Logging
-parser.add_argument("--run", type=str, default="dummy", help="wandb run name ('dummy' disables wandb logging)")
+parser.add_argument("--run", type=str, default="not_dummy", help="wandb run name ('dummy' disables wandb logging)")
 # Runtime
 parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (empty = autodetect)")
 # Model loading
@@ -66,6 +81,10 @@ parser.add_argument("--chatcore-max-sample", type=int, default=24, help="max pro
 # Data mixture
 parser.add_argument("--mmlu-epochs", type=int, default=3, help="number of epochs of MMLU in training mixture (teaches Multiple Choice)")
 parser.add_argument("--gsm8k-epochs", type=int, default=4, help="number of epochs of GSM8K in training mixture (teaches Math and Tool Use)")
+parser.add_argument("--tulu-long-rows", type=int, default=0, help="number of rows of allenai/tulu-v2-sft-long-mixture to add to mixture (0 = disabled)")
+# ---- TEMPLATE CLI: add new-task flags here (epochs, row count, etc.) ----
+# parser.add_argument("--my-new-task-rows", type=int, default=0, help="...")
+# -------------------------------------------------------------------------
 args = parser.parse_args()
 user_config = vars(args).copy()
 # -----------------------------------------------------------------------------
@@ -86,7 +105,7 @@ else:
 
 # wandb logging init
 use_dummy_wandb = args.run == "dummy" or not master_process
-wandb_run = DummyWandb() if use_dummy_wandb else wandb.init(project="nanochat-sft", name=args.run, config=user_config)
+wandb_run = DummyWandb() if use_dummy_wandb else wandb.init(entity="789_project", project="nanochat-sft", name=args.run, config=user_config)
 
 # Flash Attention status
 if not HAS_FA3:
@@ -171,12 +190,21 @@ train_tasks = [
     SimpleSpelling(size=200000, split="train"), # 200K rows of Simple Spelling (e.g. spell the word 'apple')
     SpellingBee(size=80000, split="train"), # 80K rows of Spelling Bee (e.g. how many 'r' are in 'strawberry'?)
 ]
+if args.tulu_long_rows > 0:
+    train_tasks.append(TuluLongMix(size=args.tulu_long_rows, split="train"))
+# ---- TEMPLATE train-mixture: append new training tasks here ----
+# if args.my_new_task_rows > 0:
+#     train_tasks.append(MyNewTask(size=args.my_new_task_rows, split="train"))
+# ----------------------------------------------------------------
 train_dataset = TaskMixture(train_tasks)
-print0(f"Training mixture: {len(train_dataset):,} rows (MMLU x{args.mmlu_epochs}, GSM8K x{args.gsm8k_epochs})")
+print0(f"Training mixture: {len(train_dataset):,} rows (MMLU x{args.mmlu_epochs}, GSM8K x{args.gsm8k_epochs}, TuluLong={args.tulu_long_rows})")
 val_dataset = TaskMixture([
     SmolTalk(split="test"), # 24K rows in test set
     MMLU(subset="all", split="test", stop=5200), # 14K rows in test set, use only 5.2K to match the train ratios
     GSM8K(subset="main", split="test", stop=420), # 1.32K rows in test set, use only 420 to match the train ratios
+    # ---- TEMPLATE val-mixture: add held-out splits of new tasks here ----
+    # MyNewTask(split="test", stop=...),
+    # ---------------------------------------------------------------------
 ]) # total: 24K + 14K + 1.32K ~= 39K rows
 # DataLoader is defined here, it emits inputs, targets : 2D tensors of shape (device_batch_size, max_seq_len)
 # A big problem is that we don't know the final num_iterations in advance. So we create
@@ -212,7 +240,7 @@ def sft_data_generator_bos_bestfit(split, buffer_size=100):
         nonlocal cursor, epoch
         while len(conv_buffer) < buffer_size:
             conversation = dataset[cursor]
-            ids, mask = tokenizer.render_conversation(conversation)
+            ids, mask = tokenizer.render_conversation(conversation, max_tokens=args.max_seq_len)
             conv_buffer.append((ids, mask))
             cursor += ddp_world_size
             if cursor >= dataset_size:

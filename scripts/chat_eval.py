@@ -23,6 +23,24 @@ from tasks.mmlu import MMLU
 from tasks.arc import ARC
 from tasks.gsm8k import GSM8K
 from tasks.spellingbee import SpellingBee
+# ---- TEMPLATE: import new eval task classes here ----
+# from tasks.my_new_eval import MyNewEval
+# ------------------------------------------------------
+
+# =============================================================================
+# TEMPLATE: adding a new evaluation task
+#   1. Create a Task subclass in tasks/<name>.py that defines `eval_type`
+#      as either "generative" (sampled completion + evaluate()) or
+#      "categorical" (multiple-choice via letter logits; rows must expose
+#      a `letters` key). See tasks/humaneval.py or tasks/mmlu.py for refs.
+#   2. Import it above (see TEMPLATE import marker).
+#   3. Register the task factory in the `task_module` dict inside
+#      run_chat_eval (see TEMPLATE registry marker). Use functools.partial
+#      to bind subset/split kwargs.
+#   4. (Optional) Add the task name to `all_tasks` and a random-baseline
+#      value to `baseline_accuracies` in __main__ (see TEMPLATE aggregate
+#      marker) so it counts toward the ChatCORE metric.
+# =============================================================================
 
 # -----------------------------------------------------------------------------
 # Generative evaluation loop (we go one problem at a time, sample, evaluate)
@@ -166,6 +184,9 @@ def run_chat_eval(task_name, model, tokenizer, engine,
         'ARC-Challenge': partial(ARC, subset="ARC-Challenge", split="test"),
         'GSM8K': partial(GSM8K, subset="main", split="test"),
         'SpellingBee': partial(SpellingBee, size=256, split="test"),
+        # ---- TEMPLATE registry: register new eval tasks here ----
+        # 'MyNewEval': partial(MyNewEval, split="test"),
+        # ---------------------------------------------------------
     }[task_name]
     task_object = task_module()
     # Run the evaluation
@@ -193,7 +214,7 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--step', type=int, default=None, help='Step to load')
     parser.add_argument('-x', '--max-problems', type=int, default=None, help='Max problems to evaluate')
     parser.add_argument('--device-type', type=str, default='', choices=['cuda', 'cpu', 'mps'], help='Device type for evaluation: cuda|cpu|mps. empty => autodetect')
-    parser.add_argument('--run', type=str, default='dummy', help="wandb run name ('dummy' disables wandb logging)")
+    parser.add_argument('--run', type=str, default='not_dummy', help="wandb run name ('dummy' disables wandb logging)")
     args = parser.parse_args()
 
     device_type = autodetect_device_type() if args.device_type == "" else args.device_type
@@ -207,7 +228,8 @@ if __name__ == "__main__":
     model_slug = f"{args.model_tag or 'model'}_step{meta['step']:06d}"
     use_wandb = args.run != "dummy" and master_process
     wandb_run = wandb.init(
-        project="nanochat_evals",
+        entity="789_project",
+        project="sft-evals",
         name=f"{args.source}/{model_slug}",
         config=vars(args),
         tags=[args.source, "chat_eval"],
@@ -215,6 +237,9 @@ if __name__ == "__main__":
 
     # Get the tasks to evaluate on
     all_tasks = ['ARC-Easy', 'ARC-Challenge', 'MMLU', 'GSM8K', 'HumanEval', 'SpellingBee']
+    # ---- TEMPLATE aggregate: add new eval names to include in ChatCORE ----
+    # all_tasks.append('MyNewEval')
+    # -----------------------------------------------------------------------
     baseline_accuracies = {
         'ARC-Easy': 0.25, # multiple choice 1 of 4 => 25%
         'ARC-Challenge': 0.25, # multiple choice 1 of 4 => 25%
@@ -222,6 +247,9 @@ if __name__ == "__main__":
         'GSM8K': 0.0, # open-ended => 0%
         'HumanEval': 0.0, # open-ended => 0%
         'SpellingBee': 0.0, # open-ended => 0%
+        # ---- TEMPLATE aggregate: random-guess baseline for new task ----
+        # 'MyNewEval': 0.0, # 0.0 for generative, 1/N for N-way multiple choice
+        # ----------------------------------------------------------------
     }
     task_names = all_tasks if args.task_name is None else args.task_name.split('|')
 

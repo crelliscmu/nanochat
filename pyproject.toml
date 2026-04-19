@@ -5,6 +5,8 @@ description = "the minimal full-stack ChatGPT clone"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "accelerate>=1.0.0",
+    "blobfile>=3.2.0",
     "datasets>=4.0.0",
     "fastapi>=0.117.1",
     "ipykernel>=7.1.0",
@@ -22,6 +24,7 @@ dependencies = [
     "torch==2.9.1",
     "transformers>=4.57.3",
     "uvicorn>=0.36.0",
+    "vllm>=0.11.0",
     "wandb>=0.21.3",
     "zstandard>=0.25.0",
 ]
@@ -69,6 +72,13 @@ longcontext = [
     "fuzzywuzzy>=0.18.0",
     "python-Levenshtein>=0.25.0",
 ]
+
+[project.entry-points."vllm.general_plugins"]
+register_nanochat = "nanochat.vllm_nanochat:register"
+
+[tool.setuptools.packages.find]
+include = ["nanochat*"]
+exclude = ["nanochat_artifacts*", "nanochat_pkg*"]
 
 [tool.uv]
 conflicts = [

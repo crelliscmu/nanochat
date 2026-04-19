@@ -304,7 +304,6 @@ class Report:
             for file_name in EXPECTED_FILES:
                 section_file = os.path.join(report_dir, file_name)
                 if not os.path.exists(section_file):
-                    print(f"Warning: {section_file} does not exist, skipping")
                     continue
                 with open(section_file, "r", encoding="utf-8") as in_file:
                     section = in_file.read()
@@ -364,10 +363,6 @@ class Report:
                 out_file.write(f"Total wall clock time: {hours}h{minutes}m\n")
             else:
                 out_file.write("Total wall clock time: unknown\n")
-        # also cp the report.md file to current directory
-        dest_name = f"{self.model_tag}_report.md" if self.model_tag else "report.md"
-        print(f"Copying report.md to current directory as {dest_name} for convenience")
-        shutil.copy(report_file, dest_name)
         return report_file
 
     def reset(self):
