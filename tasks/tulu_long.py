@@ -23,10 +23,11 @@ class TuluLongMix(Task):
     strict user/assistant alternation starting with user, with string content.
     """
 
-    def __init__(self, size=None, split="train", **kwargs):
+    def __init__(self, size=None, split="train", val_size=1500, **kwargs):
         super().__init__(**kwargs)
-        assert split in ["train"], "TuluLongMix only has a train split upstream"
-        ds = load_dataset("allenai/tulu-v2-sft-long-mixture", split=split)
+        assert split in ["train", "val"], "TuluLongMix split must be train|val"
+        assert val_size > 0, f"val_size must be positive, got {val_size}"
+        ds = load_dataset("allenai/tulu-v2-sft-long-mixture", split="train")
 
         # Pre-pass: collect indices of rows with a valid conversation shape.
         valid_indices = []
@@ -38,17 +39,23 @@ class TuluLongMix(Task):
         n_dropped = n_total - n_valid
         print0(f"TuluLongMix: {n_valid:,}/{n_total:,} rows valid ({n_dropped:,} dropped)")
 
-        # Deterministic shuffle so subsampling is stable across runs and ranks.
+        # Deterministic shuffle so the train/val split is stable across runs and ranks.
         rng = random.Random(42)
         rng.shuffle(valid_indices)
 
-        if size is not None:
-            assert size > 0, f"size must be positive, got {size}"
-            valid_indices = valid_indices[:size]
+        # Hold out the last `val_size` shuffled indices as val; the rest is train.
+        assert val_size < len(valid_indices), f"val_size {val_size} >= valid rows {len(valid_indices)}"
+        if split == "val":
+            selected = valid_indices[-val_size:]
+        else:
+            selected = valid_indices[:-val_size]
+            if size is not None:
+                assert size > 0, f"size must be positive, got {size}"
+                selected = selected[:size]
 
         self.ds = ds
-        self.indices = valid_indices
-        self.length = len(valid_indices)
+        self.indices = selected
+        self.length = len(selected)
 
     @staticmethod
     def _is_valid(messages):

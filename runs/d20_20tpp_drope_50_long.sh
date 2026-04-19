@@ -4,7 +4,7 @@
 
 DEPTH=20
 MAX_SEQ_LEN=8192
-SOURCE_TAG="d${DEPTH}_20tpp"
+SOURCE_TAG="d${DEPTH}_20tpp_drope_50"
 MODEL_TAG="${SOURCE_TAG}_long"
 
 export OMP_NUM_THREADS=1
@@ -28,7 +28,9 @@ curl -L -o $NANOCHAT_BASE_DIR/identity_conversations.jsonl https://karpathy-publ
 # Run SFT and eval the model. Long-context SFT: bump --max-seq-len to 8192,
 # drop --device-batch-size to keep memory at parity (attention is quadratic in
 # seq_len), and mix in 100K rows of allenai/tulu-v2-sft-long-mixture.
-torchrun --standalone --nproc_per_node=$NPROC_PER_NODE -m scripts.chat_sft -- --model-tag $MODEL_TAG --source-tag $SOURCE_TAG --device-batch-size=4 --max-seq-len=$MAX_SEQ_LEN --tulu-long-rows=100000 --run=$WANDB_RUN
+torchrun --standalone --nproc_per_node=$NPROC_PER_NODE -m scripts.chat_sft -- --model-tag $MODEL_TAG --source-tag $SOURCE_TAG --device-batch-size=4 --max-seq-len=$MAX_SEQ_LEN --tulu-long-rows=150000 --run=$WANDB_RUN
+# chat_eval looks up the tokenizer under MODEL_TAG; mirror it from SOURCE_TAG.
+cp -rn "$NANOCHAT_BASE_DIR/tokenizer/$SOURCE_TAG" "$NANOCHAT_BASE_DIR/tokenizer/$MODEL_TAG"
 torchrun --standalone --nproc_per_node=$NPROC_PER_NODE -m scripts.chat_eval -- --model-tag $MODEL_TAG -i sft --run=$WANDB_RUN
 
 python -m transformers.models.nanochat.convert_nanochat_checkpoints --input_dir "$NANOCHAT_BASE_DIR/chatsft_checkpoints/$MODEL_TAG" --output_dir "$NANOCHAT_BASE_DIR/hf_sft/$MODEL_TAG"

@@ -200,14 +200,17 @@ if args.tulu_long_rows > 0:
 # ----------------------------------------------------------------
 train_dataset = TaskMixture(train_tasks)
 print0(f"Training mixture: {len(train_dataset):,} rows (MMLU x{args.mmlu_epochs}, GSM8K x{args.gsm8k_epochs}, TuluLong={args.tulu_long_rows})")
-val_dataset = TaskMixture([
+val_tasks = [
     SmolTalk(split="test"), # 24K rows in test set
     MMLU(subset="all", split="test", stop=5200), # 14K rows in test set, use only 5.2K to match the train ratios
     GSM8K(subset="main", split="test", stop=420), # 1.32K rows in test set, use only 420 to match the train ratios
     # ---- TEMPLATE val-mixture: add held-out splits of new tasks here ----
     # MyNewTask(split="test", stop=...),
     # ---------------------------------------------------------------------
-]) # total: 24K + 14K + 1.32K ~= 39K rows
+] # total: 24K + 14K + 1.32K ~= 39K rows
+if args.tulu_long_rows > 0:
+    val_tasks.append(TuluLongMix(split="val")) # 500 rows held out from the long-mixture
+val_dataset = TaskMixture(val_tasks)
 # DataLoader is defined here, it emits inputs, targets : 2D tensors of shape (device_batch_size, max_seq_len)
 # A big problem is that we don't know the final num_iterations in advance. So we create
 # these two global variables and update them from within the data generator.
