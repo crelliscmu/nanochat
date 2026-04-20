@@ -25,7 +25,7 @@ dependencies = [
     "transformers>=4.57.3",
     "uvicorn>=0.36.0",
     "vllm>=0.11.0",
-    "wandb>=0.21.3",
+    "wandb>=0.22.0",
     "zstandard>=0.25.0",
 ]
 
