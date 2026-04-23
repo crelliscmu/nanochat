@@ -236,7 +236,7 @@ if __name__ == "__main__":
     ) if use_wandb else DummyWandb()
 
     # Get the tasks to evaluate on
-    all_tasks = ['ARC-Easy', 'ARC-Challenge', 'MMLU', 'GSM8K', 'HumanEval', 'SpellingBee']
+    all_tasks = ['ARC-Easy', 'ARC-Challenge']
     # ---- TEMPLATE aggregate: add new eval names to include in ChatCORE ----
     # all_tasks.append('MyNewEval')
     # -----------------------------------------------------------------------
