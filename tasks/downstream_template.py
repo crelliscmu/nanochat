@@ -1,9 +1,12 @@
 """
-Template for adding a new SFT dataset.
+Template for adding a new downstream dataset.
 
-Copy this file, rename the class, and fill in the TODOs. The dataset must
-yield examples in the standard conversation format expected by
-Tokenizer.render_conversation:
+Copy this file (e.g. `tasks/my_downstream.py`), rename the class, and fill in
+the TODOs below. The same Task subclass is consumed by both:
+  - scripts/downstream_train.py     (supervised fine-tuning on the dataset)
+  - scripts/downstream_task_eval.py (accuracy / pass-rate evaluation)
+
+Conversation format expected by Tokenizer.render_conversation:
     {"messages": [
         {"role": "system",    "content": "..."},  # optional, leading only
         {"role": "user",      "content": "..."},
@@ -12,7 +15,9 @@ Tokenizer.render_conversation:
     ]}
 with strict user/assistant alternation starting with user, and string content.
 
-Wire the new class into scripts/chat_sft.py alongside SmolTalk / TuluLongMix.
+For evaluation, the same row dict may carry extra keys (e.g. `letters` for
+categorical / multiple-choice tasks, or a ground-truth answer string used by
+`evaluate()` for generative tasks).
 """
 
 import random
@@ -21,7 +26,7 @@ from tasks.common import Task
 from nanochat.common import print0
 
 
-class TemplateSFT(Task):
+class DownstreamTask(Task):
     """
     TODO: one-line description of the dataset, row count, and any quirks.
     """
@@ -30,6 +35,8 @@ class TemplateSFT(Task):
     HF_DATASET = "TODO/dataset-name"
     # TODO: list of splits supported upstream
     SUPPORTED_SPLITS = ("train", "test")
+    # TODO: "generative" (sample + evaluate()) or "categorical" (multiple-choice via letter logits)
+    EVAL_TYPE = "generative"
 
     def __init__(self, split="train", size=None, **kwargs):
         super().__init__(**kwargs)
@@ -55,6 +62,11 @@ class TemplateSFT(Task):
         self.ds = ds
         self.indices = valid_indices
         self.length = len(valid_indices)
+        self.split = split
+
+    @property
+    def eval_type(self):
+        return self.EVAL_TYPE
 
     @staticmethod
     def _extract_messages(row):
@@ -86,4 +98,18 @@ class TemplateSFT(Task):
 
     def get_example(self, index):
         row = self.ds[self.indices[index]]
-        return {"messages": self._extract_messages(row)}
+        example = {"messages": self._extract_messages(row)}
+        # TODO (categorical eval only): also expose `letters` and any answer key
+        # used by `evaluate()`. Example:
+        #   example["letters"] = ["A", "B", "C", "D"]
+        #   example["answer"]  = row["answer"]  # ground truth letter or string
+        return example
+
+    def evaluate(self, problem, completion):
+        """
+        TODO: return True/False (or a 0/1 score) for whether `completion` is correct.
+        - generative: `completion` is the decoded model sample (string).
+        - categorical: `completion` is the predicted letter (string).
+        Use the ground-truth fields you stashed in `get_example`.
+        """
+        raise NotImplementedError("DownstreamTask subclasses must implement evaluate().")

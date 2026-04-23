@@ -36,7 +36,7 @@ mkdir -p $ARTIFACTS_DIR
 # hf download crellis/d18-20tpp-hf-sft                  --local-dir "$ARTIFACTS_DIR/hf_sft/d18_20tpp"
 # hf download crellis/d18-20tpp-drope-50-hf-sft         --local-dir "$ARTIFACTS_DIR/hf_sft/d18_20tpp_drope_50"
 # hf download crellis/d18-20tpp-drope-50-long-hf-sft    --local-dir "$ARTIFACTS_DIR/hf_sft/d18_20tpp_drope_50_long"
- hf download crellis/d18-20tpp-long-hf-sft             --local-dir "$ARTIFACTS_DIR/hf_sft/d18_20tpp_long"
+# hf download crellis/d18-20tpp-long-hf-sft             --local-dir "$ARTIFACTS_DIR/hf_sft/d18_20tpp_long"
 # hf download crellis/d18-9tpp-hf-sft                   --local-dir "$ARTIFACTS_DIR/hf_sft/d18_9tpp"
 # hf download crellis/d18-9tpp-drope-25-hf-sft          --local-dir "$ARTIFACTS_DIR/hf_sft/d18_9tpp_drope_25"
 # hf download crellis/d18-9tpp-drope-50-hf-sft          --local-dir "$ARTIFACTS_DIR/hf_sft/d18_9tpp_drope_50"
@@ -84,9 +84,9 @@ download_checkpoint() {
 # download_checkpoint crellis/d18-9tpp-drope-25-base_checkpoints    base_checkpoints d18_9tpp_drope_25
 # download_checkpoint crellis/d18-9tpp-drope-50-base_checkpoints    base_checkpoints d18_9tpp_drope_50
 # download_checkpoint crellis/d18-9tpp-drope-75-base_checkpoints    base_checkpoints d18_9tpp_drope_75
- download_checkpoint crellis/d20-20tpp-base_checkpoints            base_checkpoints d20_20tpp
+download_checkpoint crellis/d20-20tpp-base_checkpoints            base_checkpoints d20_20tpp
 # download_checkpoint crellis/d20-20tpp-drope-50-base_checkpoints   base_checkpoints d20_20tpp_drope_50
-# download_checkpoint crellis/d20-40tpp-base_checkpoints            base_checkpoints d20_40tpp
+download_checkpoint crellis/d20-40tpp-base_checkpoints            base_checkpoints d20_40tpp
 # download_checkpoint crellis/d20-40tpp-drope-50-base_checkpoints   base_checkpoints d20_40tpp_drope_50
 # download_checkpoint crellis/d20-9tpp-base_checkpoints             base_checkpoints d20_9tpp
 # download_checkpoint crellis/d20-9tpp-drope-25-base_checkpoints    base_checkpoints d20_9tpp_drope_25
@@ -109,7 +109,7 @@ download_checkpoint() {
 # download_checkpoint crellis/d20-40tpp-chatsft_checkpoints                 chatsft_checkpoints d20_40tpp
 # download_checkpoint crellis/d20-40tpp-drope-50-chatsft_checkpoints        chatsft_checkpoints d20_40tpp_drope_50
 # download_checkpoint crellis/d20-40tpp-drope-50-long-chatsft_checkpoints   chatsft_checkpoints d20_40tpp_drope_50_long
- download_checkpoint crellis/d20-40tpp-long-chatsft_checkpoints            chatsft_checkpoints d20_40tpp_long
+# download_checkpoint crellis/d20-40tpp-long-chatsft_checkpoints            chatsft_checkpoints d20_40tpp_long
 # download_checkpoint crellis/d20-9tpp-chatsft_checkpoints                  chatsft_checkpoints d20_9tpp
 # download_checkpoint crellis/d20-9tpp-drope-25-chatsft_checkpoints         chatsft_checkpoints d20_9tpp_drope_25
 # download_checkpoint crellis/d20-9tpp-drope-50-chatsft_checkpoints         chatsft_checkpoints d20_9tpp_drope_50
